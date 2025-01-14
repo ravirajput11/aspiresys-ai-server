@@ -41,6 +41,45 @@ app.get("/api/auth/token", async (req, res) => {
   }
 });
 
+app.post("/api/web-bff/customers", async (req, res) => {
+  try {
+    const headers = {
+      Authorization: req.header("Authorization"),
+      "Content-Type": "application/json",
+    };
+    console.log("req.body", req.body);
+    const response = await axios.post(
+      `https://dev.aurascc.net/web-bff/customers`,
+      isEmptyObject(req.body) ? null : req.body,
+      { headers }
+    );
+    res.json(response.data);
+  } catch (error) {
+    console.error("Error exchanging code for token:", error);
+    res.status(500).send("Internal Server Error");
+  }
+});
+
+app.post("/api/web-bff/customers/login", async (req, res) => {
+  try {
+    const headers = {
+      Authorization: req.header("Authorization"),
+      "Content-Type": "application/json",
+    };
+
+    const response = await axios.post(
+      `https://dev.aurascc.net/web-bff/customers/login`,
+      isEmptyObject(req.body) ? null : req.body,
+      { headers }
+    );
+    res.json(response.data);
+  } catch (error) {
+    console.error("Error exchanging code for token:", error);
+    res.status(500).send("Internal Server Error");
+  }
+});
+
+
 // app.post("/api/web-bff/auras-gpt-spa", async (req, res) => {
 //   try {
 //     const headers = {
