@@ -1,7 +1,6 @@
 const express = require("express");
 const axios = require("axios");
 const dotenv = require("dotenv");
-const path = require("path");
 const cors = require("cors");
 const multer = require("multer");
 const fs = require("fs");
@@ -50,7 +49,7 @@ app.get("/api/auth/token", async (req, res) => {
 
     res.json(response.data);
   } catch (error) {
-    console.error("Error exchanging code for token:", error);
+    console.error("Error:", error);
     res.status(500).send("Internal Server Error");
   }
 });
@@ -62,8 +61,9 @@ app.get("/api/auth/token/local", async (req, res) => {
       client_id: process.env.CLIENT_ID ?? "",
       client_secret: process.env.CLIENT_SECRET ?? "",
     };
+    const URL = `http://localhost:8081/realms/springboot-oauth-keycloak/protocol/openid-connect/token`;
     const response = await axios.post(
-      `http://localhost:8081/realms/springboot-oauth-keycloak/protocol/openid-connect/token`,
+      `${URL}`,
       new URLSearchParams(tokenRequest),
       {
         headers: {
@@ -74,7 +74,7 @@ app.get("/api/auth/token/local", async (req, res) => {
 
     res.json(response.data);
   } catch (error) {
-    console.error("Error exchanging code for token:", error);
+    console.error("Error:", error);
     res.status(500).send("Internal Server Error");
   }
 });
@@ -93,7 +93,7 @@ app.post("/api/web-bff/customers", async (req, res) => {
     );
     res.json(response.data);
   } catch (error) {
-    console.error("Error exchanging code for token:", error);
+    console.error("Error:", error);
     res.status(500).send("Internal Server Error");
   }
 });
@@ -112,7 +112,7 @@ app.post("/api/web-bff/customers/login", async (req, res) => {
     );
     res.json(response.data);
   } catch (error) {
-    console.error("Error exchanging code for token:", error);
+    console.error("Error:", error);
     res.status(500).send("Internal Server Error");
   }
 });
@@ -131,6 +131,7 @@ app.post(
       const formData = new FormData();
       formData.append("file", fs.createReadStream(req.file.path)); // Append the file
 
+      // const URL = https://auras-dc-dev-api.azure-api.net/chatgpt/bff/users/xstore-chatgpt?userQuery=create frd
       const response = await axios.post(
         `http://localhost:8080/bff/users/xstore-chatgpt`,
         formData,
@@ -141,29 +142,11 @@ app.post(
       );
       return res.json(response.data);
     } catch (error) {
-      console.error("Error exchanging code for token:", error);
+      console.error("Error:", error);
       res.status(500).send("Internal Server Error");
     }
   }
 );
-
-// app.post("/api/web-bff/auras-gpt-spa", async (req, res) => {
-//   try {
-//     const headers = {
-//       Authorization: req.header("Authorization"),
-//       "Content-Type": "application/json",
-//     };
-//     const response = await axios.post(
-//       `https://auras-dc-dev-api.azure-api.net/web-bff/auras-gpt-spa`,
-//       isEmptyObject(req.body) ? null : req.body,
-//       { params: req.query, headers }
-//     );
-//     res.json(response.data);
-//   } catch (error) {
-//     console.error("Error exchanging code for token:", error);
-//     res.status(500).send("Internal Server Error");
-//   }
-// });
 
 app.listen(port, () => {
   console.log(`Server running on http://localhost:${port}`);
