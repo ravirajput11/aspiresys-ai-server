@@ -3,6 +3,9 @@ const axios = require("axios");
 const dotenv = require("dotenv");
 const path = require("path");
 const cors = require("cors");
+const multer = require("multer");
+const fs = require("fs");
+const FormData = require("form-data");
 
 dotenv.config();
 
@@ -16,6 +19,17 @@ const isEmptyObject = (obj) => {
   return Object.keys(obj).length === 0 && obj.constructor === Object;
 };
 
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    return cb(null, "./uploads");
+  },
+  filename: function (req, file, cb) {
+    const uniqueFileName = `${Date.now()}-${file.originalname}`;
+    return cb(null, uniqueFileName);
+  },
+});
+const upload = multer({ storage: storage });
+
 app.get("/api/auth/token", async (req, res) => {
   try {
     const tokenRequest = {
@@ -26,6 +40,30 @@ app.get("/api/auth/token", async (req, res) => {
     };
     const response = await axios.post(
       `${process.env.AZURE_AUTHORITY}/${process.env.AZURE_TENANT_ID}/oauth2/v2.0/token`,
+      new URLSearchParams(tokenRequest),
+      {
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+      }
+    );
+
+    res.json(response.data);
+  } catch (error) {
+    console.error("Error exchanging code for token:", error);
+    res.status(500).send("Internal Server Error");
+  }
+});
+
+app.get("/api/auth/token/local", async (req, res) => {
+  try {
+    const tokenRequest = {
+      grant_type: "client_credentials",
+      client_id: process.env.CLIENT_ID ?? "",
+      client_secret: process.env.CLIENT_SECRET ?? "",
+    };
+    const response = await axios.post(
+      `http://localhost:8081/realms/springboot-oauth-keycloak/protocol/openid-connect/token`,
       new URLSearchParams(tokenRequest),
       {
         headers: {
@@ -79,6 +117,35 @@ app.post("/api/web-bff/customers/login", async (req, res) => {
   }
 });
 
+app.post(
+  "/api/bff/users/xstore-chatgpt",
+  upload.single("file"),
+  async (req, res) => {
+    const userQuery = req.query.userQuery;
+
+    try {
+      const headers = {
+        Authorization: req.header("Authorization"),
+        "Content-Type": "multipart/form-data",
+      };
+      const formData = new FormData();
+      formData.append("file", fs.createReadStream(req.file.path)); // Append the file
+
+      const response = await axios.post(
+        `http://localhost:8080/bff/users/xstore-chatgpt`,
+        formData,
+        {
+          params: { userQuery }, // Send query as URL parameter
+          headers,
+        }
+      );
+      return res.json(response.data);
+    } catch (error) {
+      console.error("Error exchanging code for token:", error);
+      res.status(500).send("Internal Server Error");
+    }
+  }
+);
 
 // app.post("/api/web-bff/auras-gpt-spa", async (req, res) => {
 //   try {
@@ -97,9 +164,6 @@ app.post("/api/web-bff/customers/login", async (req, res) => {
 //     res.status(500).send("Internal Server Error");
 //   }
 // });
-app.use("*", (req, res) => {
-  res.send("server is running");
-});
 
 app.listen(port, () => {
   console.log(`Server running on http://localhost:${port}`);
