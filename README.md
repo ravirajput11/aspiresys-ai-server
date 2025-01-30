@@ -10,4 +10,4 @@
  `npm start`
 
 # Start the project for development
-`npm dev`
+`npm run dev`

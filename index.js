@@ -18,6 +18,7 @@ const isEmptyObject = (obj) => {
   return Object.keys(obj).length === 0 && obj.constructor === Object;
 };
 
+// Multer configuration for file upload
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
     return cb(null, "./uploads");
@@ -29,6 +30,7 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage: storage });
 
+// cloud token endpoint
 app.get("/api/auth/token", async (req, res) => {
   try {
     const tokenRequest = {
@@ -54,6 +56,7 @@ app.get("/api/auth/token", async (req, res) => {
   }
 });
 
+// local token endpoint
 app.get("/api/auth/token/local", async (req, res) => {
   try {
     const tokenRequest = {
@@ -79,13 +82,13 @@ app.get("/api/auth/token/local", async (req, res) => {
   }
 });
 
+// register user endpoint
 app.post("/api/web-bff/customers", async (req, res) => {
   try {
     const headers = {
       Authorization: req.header("Authorization"),
       "Content-Type": "application/json",
     };
-    console.log("req.body", req.body);
     const response = await axios.post(
       `https://dev.aurascc.net/web-bff/customers`,
       isEmptyObject(req.body) ? null : req.body,
@@ -98,6 +101,7 @@ app.post("/api/web-bff/customers", async (req, res) => {
   }
 });
 
+// login user endpoint
 app.post("/api/web-bff/customers/login", async (req, res) => {
   try {
     const headers = {
@@ -117,6 +121,7 @@ app.post("/api/web-bff/customers/login", async (req, res) => {
   }
 });
 
+// chat endpoint
 app.post(
   "/api/bff/users/xstore-chatgpt",
   upload.single("file"),
@@ -131,15 +136,13 @@ app.post(
       const formData = new FormData();
       formData.append("file", fs.createReadStream(req.file.path)); // Append the file
 
-      // const URL = https://auras-dc-dev-api.azure-api.net/chatgpt/bff/users/xstore-chatgpt?userQuery=create frd
-      const response = await axios.post(
-        `http://localhost:8080/bff/users/xstore-chatgpt`,
-        formData,
-        {
-          params: { userQuery }, // Send query as URL parameter
-          headers,
-        }
-      );
+      const URL = `https://auras-dc-dev-api.azure-api.net/chatgpt/bff/users/xstore-chatgpt?userQuery=`;
+      // const URL = `http://localhost:8080/bff/users/xstore-chatgpt`
+
+      const response = await axios.post(URL, formData, {
+        params: { userQuery }, // Send query as URL parameter
+        headers,
+      });
       return res.json(response.data);
     } catch (error) {
       console.error("Error:", error);
