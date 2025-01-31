@@ -6,6 +6,9 @@ const multer = require("multer");
 const fs = require("fs");
 const FormData = require("form-data");
 
+// Instead of buffer, use streams for better memory management
+const { Readable } = require("stream");
+
 dotenv.config();
 
 const app = express();
@@ -19,16 +22,44 @@ const isEmptyObject = (obj) => {
 };
 
 // Multer configuration for file upload
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    return cb(null, "./uploads");
+// const storage = multer.diskStorage({
+//   destination: function (req, file, cb) {
+//     return cb(null, "./uploads");
+//   },
+//   filename: function (req, file, cb) {
+//     const uniqueFileName = `${Date.now()}-${file.originalname}`;
+//     return cb(null, uniqueFileName);
+//   },
+// });
+// const upload = multer({ storage: storage });
+
+// Configure multer with limits and memory storage
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 10 * 1024 * 1024, // 10MB limit
+    files: 1,
   },
-  filename: function (req, file, cb) {
-    const uniqueFileName = `${Date.now()}-${file.originalname}`;
-    return cb(null, uniqueFileName);
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = [
+      "application/pdf",
+      "text/plain",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ];
+    cb(null, allowedTypes.includes(file.mimetype));
   },
 });
-const upload = multer({ storage: storage });
+
+// const cleanupMiddleware = (req, res, next) => {
+//   if (req.file && req.file.path) {
+//     fs.unlink(req.file.path, (err) => {
+//       if (err) console.error('Cleanup error:', err);
+//     });
+//   }
+//   next();
+// };
+// // Apply to route
+// app.post("/api/...", upload.single("file"), cleanupMiddleware, ...);
 
 // cloud token endpoint
 app.get("/api/auth/token", async (req, res) => {
@@ -122,31 +153,91 @@ app.post("/api/web-bff/customers/login", async (req, res) => {
 });
 
 // chat endpoint
+// app.post(
+//   "/api/bff/users/xstore-chatgpt",
+//   upload.single("file"),
+//   async (req, res) => {
+//     const userQuery = req.query.userQuery;
+
+//     try {
+//       const headers = {
+//         Authorization: req.header("Authorization"),
+//         "Content-Type": "multipart/form-data",
+//       };
+//       const formData = new FormData();
+//       formData.append("file", fs.createReadStream(req.file.path)); // Append the file
+
+//       const URL = `https://auras-dc-dev-api.azure-api.net/chatgpt/bff/users/xstore-chatgpt?userQuery=`;
+//       // const URL = `http://localhost:8080/bff/users/xstore-chatgpt`
+
+//       const response = await axios.post(URL, formData, {
+//         params: { userQuery }, // Send query as URL parameter
+//         headers,
+//       });
+//       return res.json(response.data);
+//     } catch (error) {
+//       console.error("Error:", error);
+//       res.status(500).send({ "Internal Server Error": error });
+//     }
+//   }
+// );
+
+// Updated chat endpoint
 app.post(
   "/api/bff/users/xstore-chatgpt",
   upload.single("file"),
   async (req, res) => {
-    const userQuery = req.query.userQuery;
-
     try {
-      const headers = {
-        Authorization: req.header("Authorization"),
-        "Content-Type": "multipart/form-data",
-      };
+      // Validate inputs
+      if (!req.query.userQuery) {
+        return res.status(400).json({ error: "userQuery is required" });
+      }
+
+      if (!req.file) {
+        return res.status(400).json({ error: "File is required" });
+      }
+
+      // Create form data for upstream API
       const formData = new FormData();
-      formData.append("file", fs.createReadStream(req.file.path)); // Append the file
 
-      const URL = `https://auras-dc-dev-api.azure-api.net/chatgpt/bff/users/xstore-chatgpt?userQuery=`;
-      // const URL = `http://localhost:8080/bff/users/xstore-chatgpt`
-
-      const response = await axios.post(URL, formData, {
-        params: { userQuery }, // Send query as URL parameter
-        headers,
+      // In file handler
+      const fileStream = Readable.from(req.file.buffer);
+      formData.append("file", fileStream, {
+        filename: req.file.originalname,
+        contentType: req.file.mimetype,
+        knownLength: req.file.size,
       });
-      return res.json(response.data);
+      
+      // formData.append("file", req.file.buffer, {
+      //   filename: req.file.originalname,
+      //   contentType: req.file.mimetype,
+      //   knownLength: req.file.size,
+      // });
+
+      const response = await axios.post(
+        "https://auras-dc-dev-api.azure-api.net/chatgpt/bff/users/xstore-chatgpt",
+        formData,
+        {
+          params: { userQuery: req.query.userQuery },
+          headers: {
+            Authorization: req.header("Authorization"),
+            ...formData.getHeaders(),
+          },
+        }
+      );
+
+      res.json(response.data);
     } catch (error) {
       console.error("Error:", error);
-      res.status(500).send("Internal Server Error", error);
+
+      // Enhanced error handling
+      const status = error.response?.status || 500;
+      const message =
+        error.response?.data?.message ||
+        error.message ||
+        "Internal server error";
+
+      res.status(status).json({ error: message });
     }
   }
 );
