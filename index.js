@@ -6,8 +6,8 @@ const multer = require("multer");
 const fs = require("fs");
 const FormData = require("form-data");
 
-// Instead of buffer, use streams for better memory management
-const { Readable } = require("stream");
+const { Readable } = require("stream"); // Instead of buffer, use streams for better memory management
+const { v4: uuidv4 } = require("uuid"); // Generate unique job IDs
 
 dotenv.config();
 
@@ -20,6 +20,8 @@ app.use(express.json());
 const isEmptyObject = (obj) => {
   return Object.keys(obj).length === 0 && obj.constructor === Object;
 };
+
+const jobs = {}; // Store job statuses
 
 // Multer configuration for file upload
 // const storage = multer.diskStorage({
@@ -183,64 +185,126 @@ app.post("/api/web-bff/customers/login", async (req, res) => {
 // );
 
 // Updated chat endpoint
+// app.post(
+//   "/api/bff/users/xstore-chatgpt",
+//   upload.single("file"),
+//   async (req, res) => {
+//     try {
+//       // Validate inputs
+//       if (!req.query.userQuery) {
+//         return res.status(400).json({ error: "userQuery is required" });
+//       }
+
+//       if (!req.file) {
+//         return res.status(400).json({ error: "File is required" });
+//       }
+
+//       // Create form data for upstream API
+//       const formData = new FormData();
+
+//       // In file handler
+//       const fileStream = Readable.from(req.file.buffer);
+//       formData.append("file", fileStream, {
+//         filename: req.file.originalname,
+//         contentType: req.file.mimetype,
+//         knownLength: req.file.size,
+//       });
+
+//       // formData.append("file", req.file.buffer, {
+//       //   filename: req.file.originalname,
+//       //   contentType: req.file.mimetype,
+//       //   knownLength: req.file.size,
+//       // });
+
+//       const response = await axios.post(
+//         "https://auras-dc-dev-api.azure-api.net/chatgpt/bff/users/xstore-chatgpt",
+//         formData,
+//         {
+//           params: { userQuery: req.query.userQuery },
+//           headers: {
+//             Authorization: req.header("Authorization"),
+//             ...formData.getHeaders(),
+//           },
+//         }
+//       );
+
+//       res.json(response.data);
+//     } catch (error) {
+//       console.error("Error:", error);
+
+//       // Enhanced error handling
+//       const status = error.response?.status || 500;
+//       const message =
+//         error.response?.data?.message ||
+//         error.message ||
+//         "Internal server error";
+
+//       res.status(status).json({ error: message });
+//     }
+//   }
+// );
+
+// Start processing request
 app.post(
   "/api/bff/users/xstore-chatgpt",
   upload.single("file"),
   async (req, res) => {
     try {
-      // Validate inputs
-      if (!req.query.userQuery) {
+      if (!req.query.userQuery)
         return res.status(400).json({ error: "userQuery is required" });
-      }
+      if (!req.file) return res.status(400).json({ error: "File is required" });
 
-      if (!req.file) {
-        return res.status(400).json({ error: "File is required" });
-      }
+      const jobId = uuidv4(); // Generate a unique job ID
+      jobs[jobId] = { status: "processing" }; // Set initial status
 
-      // Create form data for upstream API
-      const formData = new FormData();
-
-      // In file handler
-      const fileStream = Readable.from(req.file.buffer);
-      formData.append("file", fileStream, {
-        filename: req.file.originalname,
-        contentType: req.file.mimetype,
-        knownLength: req.file.size,
-      });
-      
-      // formData.append("file", req.file.buffer, {
-      //   filename: req.file.originalname,
-      //   contentType: req.file.mimetype,
-      //   knownLength: req.file.size,
-      // });
-
-      const response = await axios.post(
-        "https://auras-dc-dev-api.azure-api.net/chatgpt/bff/users/xstore-chatgpt",
-        formData,
-        {
-          params: { userQuery: req.query.userQuery },
-          headers: {
-            Authorization: req.header("Authorization"),
-            ...formData.getHeaders(),
-          },
-        }
+      // Process the request asynchronously
+      processChatRequest(
+        jobId,
+        req.file,
+        req.query.userQuery,
+        req.header("Authorization")
       );
 
-      res.json(response.data);
+      res.json({ jobId }); // Return job ID immediately
     } catch (error) {
       console.error("Error:", error);
-
-      // Enhanced error handling
-      const status = error.response?.status || 500;
-      const message =
-        error.response?.data?.message ||
-        error.message ||
-        "Internal server error";
-
-      res.status(status).json({ error: message });
+      res.status(500).json({ error: "Internal server error" });
     }
   }
 );
+
+// Polling endpoint to check job status
+app.get("/api/bff/users/xstore-chatgpt/status/:jobId", (req, res) => {
+  const job = jobs[req.params.jobId];
+  if (!job) return res.status(404).json({ error: "Job not found" });
+
+  res.json(job);
+});
+
+// Asynchronous function to process the chat request
+async function processChatRequest(jobId, file, userQuery, authHeader) {
+  try {
+    const formData = new FormData();
+    const fileStream = Readable.from(file.buffer);
+    formData.append("file", fileStream, {
+      filename: file.originalname,
+      contentType: file.mimetype,
+    });
+
+    const response = await axios.post(
+      "https://auras-dc-dev-api.azure-api.net/chatgpt/bff/users/xstore-chatgpt",
+      formData,
+      {
+        params: { userQuery },
+        headers: { Authorization: authHeader, ...formData.getHeaders() },
+      }
+    );
+
+    jobs[jobId] = { status: "completed", data: response.data }; // Store response data
+  } catch (error) {
+    jobs[jobId] = { status: "failed", error: error.message };
+  }
+}
 
 app.listen(port, () => {
   console.log(`Server running on http://localhost:${port}`);
