@@ -35,7 +35,7 @@ const upload = multer({
 // 🌟 Utility: Create a new job
 const createJob = () => {
   const jobId = uuidv4();
-  jobStore[jobId] = { status: "processing" };
+  jobs[jobId] = { status: "processing" };
   return jobId;
 };
 
